@@ -55,7 +55,12 @@ static StripeSkipList * LoadStripeSkipList(FILE *tableFile,
 										   StripeFooter *stripeFooter,
 										   uint32 columnCount,
 										   bool *projectedColumnMask,
+#if (PG_VERSION_NUM >= 110000)
+										   Form_pg_attribute attributeFormArray);
+#else
 										   Form_pg_attribute *attributeFormArray);
+#endif
+
 static bool * SelectedBlockMask(StripeSkipList *stripeSkipList,
 								List *projectedColumnList, List *whereClauseList);
 static List * BuildRestrictInfoList(List *whereClauseList);
@@ -75,7 +80,11 @@ static void DeserializeDatumArray(StringInfo datumBuffer, bool *existsArray,
 								  int datumTypeLength, char datumTypeAlign,
 								  Datum *datumArray);
 static void DeserializeBlockData(StripeBuffers *stripeBuffers, uint64 blockIndex,
+#if (PG_VERSION_NUM >= 110000)
+								 Form_pg_attribute attributeFormArray,
+#else
 								 Form_pg_attribute *attributeFormArray,
+#endif
 								 uint32 rowCount, ColumnBlockData **blockDataArray,
 								 TupleDesc tupleDescriptor);
 static Datum ColumnDefaultValue(TupleConstr *tupleConstraints,
@@ -126,9 +135,13 @@ CStoreBeginRead(const char *filename, TupleDesc tupleDescriptor,
 	 */
 	stripeReadContext = AllocSetContextCreate(CurrentMemoryContext,
 											  "Stripe Read Memory Context",
+#if (PG_VERSION_NUM >= 110000)
+											  ALLOCSET_DEFAULT_SIZES);
+#else
 											  ALLOCSET_DEFAULT_MINSIZE,
 											  ALLOCSET_DEFAULT_INITSIZE,
 											  ALLOCSET_DEFAULT_MAXSIZE);
+#endif
 
 	columnCount = tupleDescriptor->natts;
 	projectedColumnMask = ProjectedColumnMask(columnCount, projectedColumnList);
@@ -233,7 +246,12 @@ CStoreReadNextRow(TableReadState *readState, Datum *columnValues, bool *columnNu
 	uint32 blockIndex = 0;
 	uint32 blockRowIndex = 0;
 	TableFooter *tableFooter = readState->tableFooter;
+#if (PG_VERSION_NUM >= 110000)
+	Form_pg_attribute attributeFormArray = readState->tupleDescriptor->attrs;
+#else
 	Form_pg_attribute *attributeFormArray = readState->tupleDescriptor->attrs;
+#endif
+
 	MemoryContext oldContext = NULL;
 
 	/*
@@ -474,7 +492,11 @@ LoadFilteredStripeBuffers(FILE *tableFile, StripeMetadata *stripeMetadata,
 	ColumnBuffers **columnBuffersArray = NULL;
 	uint64 currentColumnFileOffset = 0;
 	uint32 columnIndex = 0;
+#if (PG_VERSION_NUM >= 110000)
+	Form_pg_attribute attributeFormArray = tupleDescriptor->attrs;
+#else
 	Form_pg_attribute *attributeFormArray = tupleDescriptor->attrs;
+#endif
 	uint32 columnCount = tupleDescriptor->natts;
 
 	StripeFooter *stripeFooter = LoadStripeFooter(tableFile, stripeMetadata,
@@ -508,7 +530,11 @@ LoadFilteredStripeBuffers(FILE *tableFile, StripeMetadata *stripeMetadata,
 		{
 			ColumnBlockSkipNode *blockSkipNode =
 				selectedBlockSkipList->blockSkipNodeArray[columnIndex];
+#if (PG_VERSION_NUM >= 110000)
+			Form_pg_attribute attributeForm = &(attributeFormArray[columnIndex]);
+#else
 			Form_pg_attribute attributeForm = attributeFormArray[columnIndex];
+#endif
 			uint32 blockCount = selectedBlockSkipList->blockCount;
 
 			ColumnBuffers *columnBuffers = LoadColumnBuffers(tableFile, blockSkipNode,
@@ -649,7 +675,11 @@ static StripeSkipList *
 LoadStripeSkipList(FILE *tableFile, StripeMetadata *stripeMetadata,
 				   StripeFooter *stripeFooter, uint32 columnCount,
 				   bool *projectedColumnMask,
+#if (PG_VERSION_NUM >= 110000)
+				   Form_pg_attribute attributeFormArray)
+#else
 				   Form_pg_attribute *attributeFormArray)
+#endif
 {
 	StripeSkipList *stripeSkipList = NULL;
 	ColumnBlockSkipNode **blockSkipNodeArray = NULL;
@@ -680,11 +710,16 @@ LoadStripeSkipList(FILE *tableFile, StripeMetadata *stripeMetadata,
 		 */
 		if (projectedColumnMask[columnIndex] || firstColumn)
 		{
+#if (PG_VERSION_NUM >= 110000)
+			Form_pg_attribute attributeForm = &(attributeFormArray[columnIndex]);
+#else
 			Form_pg_attribute attributeForm = attributeFormArray[columnIndex];
+#endif
 
 			StringInfo columnSkipListBuffer =
 				ReadFromFile(tableFile, currentColumnSkipListFileOffset,
 							 columnSkipListSize);
+
 			ColumnBlockSkipNode *columnSkipList =
 				DeserializeColumnSkipList(columnSkipListBuffer, attributeForm->attbyval,
 										  attributeForm->attlen, stripeBlockCount);
@@ -1174,14 +1209,22 @@ DeserializeDatumArray(StringInfo datumBuffer, bool *existsArray, uint32 datumCou
  */
 static void
 DeserializeBlockData(StripeBuffers *stripeBuffers, uint64 blockIndex,
+#if (PG_VERSION_NUM >= 110000)
+					 Form_pg_attribute attributeFormArray, uint32 rowCount,
+#else
 					 Form_pg_attribute *attributeFormArray, uint32 rowCount,
+#endif
 					 ColumnBlockData **blockDataArray, TupleDesc tupleDescriptor)
 {
 	int columnIndex = 0;
 	for (columnIndex = 0; columnIndex < stripeBuffers->columnCount; columnIndex++)
 	{
 		ColumnBlockData *blockData = blockDataArray[columnIndex];
+#if (PG_VERSION_NUM >= 110000)
+		Form_pg_attribute attributeForm = &(attributeFormArray[columnIndex]);
+#else
 		Form_pg_attribute attributeForm = attributeFormArray[columnIndex];
+#endif
 		ColumnBuffers *columnBuffers = stripeBuffers->columnBuffersArray[columnIndex];
 		bool columnAdded = false;
 
